@@ -4,7 +4,7 @@ document.addEventListener("DOMContentLoaded", function(event) {
     const toggleBtn = document.getElementById('toggle-btn');
     const attackTime = 0.5;
     const decayTime = 0.2;
-    const sustainVal = 0.7;
+    const sustainVal = 0.3;
     const releaseTime = 1.5;
 
     const smileyList = [":)", ":D", "C:", ":/", "/:", ";)", ":P", "XD", ":-O", "B)", "<3"];
