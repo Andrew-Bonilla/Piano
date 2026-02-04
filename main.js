@@ -66,7 +66,6 @@ document.addEventListener("DOMContentLoaded", function(event) {
         if (keyboardFrequencyMap[key] && !activeOscillators[key]) {
             playNote(key);
             updateSmiley();
-            //handlePolyphony();
         }
     }
 
@@ -83,19 +82,13 @@ document.addEventListener("DOMContentLoaded", function(event) {
             gainNode.gain.setValueAtTime(gainNode.gain.value, now);
             gainNode.gain.exponentialRampToValueAtTime(0.0001, now + releaseTime);
             
-            // Schedule stop
             osc.stop(now + releaseTime);
             
-            // CRITICAL FIX: Delete from activeOscillators immediately
-            // This allows the key to be pressed again right away
             delete activeOscillators[key];
             
-            // Clean up after release completes
             setTimeout(() => {
                 osc.disconnect();
                 gainNode.disconnect();
-                // Rebalance remaining notes
-                //handlePolyphony();
             }, releaseTime * 1000 + 50);
         }
     }
