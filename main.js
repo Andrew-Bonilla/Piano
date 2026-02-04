@@ -2,13 +2,16 @@ document.addEventListener("DOMContentLoaded", function(event) {
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     let currentWave = 'sine';
     const toggleBtn = document.getElementById('toggle-btn');
-    const attackTime = 0.1;
+    const attackTime = 0.5;
     const decayTime = 0.2;
-    const sustainVal = 0.3;
-    const releaseTime = 0.3;
+    const sustainVal = 0.7;
+    const releaseTime = 1.5;
 
+    const smileyList = [":)", ":D", "C:", ":/", "/:", ";)", ":P", "XD", ":-O", "B)", "<3"];
+    const smileyDiv = document.getElementById('smiley');
+    
     const globalGain = audioCtx.createGain();
-    globalGain.gain.setValueAtTime(0.8, audioCtx.currentTime)
+    globalGain.gain.setValueAtTime(0.5, audioCtx.currentTime);
     globalGain.connect(audioCtx.destination);
 
     toggleBtn.addEventListener('click', () => {
@@ -51,49 +54,77 @@ document.addEventListener("DOMContentLoaded", function(event) {
     window.addEventListener('keydown', keyDown, false);
     window.addEventListener('keyup', keyUp, false);
 
-    activeOscillators = {}
+    let activeOscillators = {};
+
+    function updateSmiley() {
+        const randomSmiley = smileyList[Math.floor(Math.random() * smileyList.length)];
+        smileyDiv.textContent = randomSmiley;
+    }
 
     function keyDown(event) {
         const key = (event.detail || event.which).toString();
         if (keyboardFrequencyMap[key] && !activeOscillators[key]) {
             playNote(key);
+            updateSmiley();
+            //handlePolyphony();
         }
     }
 
     function keyUp(event) {
         const key = (event.detail || event.which).toString();
         if (keyboardFrequencyMap[key] && activeOscillators[key]) {
-            console.log("Oscillator ramped.")
-            activeOscillators[key][1].gain.cancelScheduledValues(audioCtx.currentTime);
-            activeOscillators[key][1].gain.setValueAtTime(activeOscillators[key][1].gain.value, audioCtx.currentTime);
-            activeOscillators[key][1].gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + releaseTime);
+            const now = audioCtx.currentTime;
+            const data = activeOscillators[key];
+            const gainNode = data[1];
+            const osc = data[0];
+            
+            // Start release envelope
+            gainNode.gain.cancelScheduledValues(now);
+            gainNode.gain.setValueAtTime(gainNode.gain.value, now);
+            gainNode.gain.exponentialRampToValueAtTime(0.0001, now + releaseTime);
+            
+            // Schedule stop
+            osc.stop(now + releaseTime);
+            
+            // CRITICAL FIX: Delete from activeOscillators immediately
+            // This allows the key to be pressed again right away
+            delete activeOscillators[key];
+            
+            // Clean up after release completes
             setTimeout(() => {
-                if (activeOscillators[key]) {
-                    activeOscillators[key][0].stop();
-                    console.log("Oscillator stopped.")
-                    activeOscillators[key][0].disconnect();
-                    activeOscillators[key][1].disconnect();
-                    delete activeOscillators[key];
-                }
-                
+                osc.disconnect();
+                gainNode.disconnect();
+                // Rebalance remaining notes
+                //handlePolyphony();
             }, releaseTime * 1000 + 50);
         }
     }
 
     function playNote(key) {
-        const gainNode = audioCtx.createGain();
+        const now = audioCtx.currentTime;
         const osc = audioCtx.createOscillator();
+        const gainNode = audioCtx.createGain();
 
-        gainNode.gain.cancelScheduledValues(audioCtx.currentTime);
-        gainNode.gain.setValueAtTime(0, audioCtx.currentTime);
-        gainNode.gain.linearRampToValueAtTime(1, audioCtx.currentTime + attackTime);
-        gainNode.gain.linearRampToValueAtTime(sustainVal, audioCtx.currentTime + attackTime + decayTime);
+        const numVoices = Object.keys(activeOscillators).length + 1;
+        const peakGain = 0.6 / Math.sqrt(numVoices);
+        const sustainGain = peakGain * sustainVal;
 
-        osc.frequency.setValueAtTime(keyboardFrequencyMap[key], audioCtx.currentTime)
+        gainNode.gain.setValueAtTime(0, now);
+        gainNode.gain.linearRampToValueAtTime(peakGain, now + attackTime);
+        gainNode.gain.linearRampToValueAtTime(sustainGain, now + attackTime + decayTime);
+
+        osc.frequency.setValueAtTime(keyboardFrequencyMap[key], now);
         osc.type = currentWave;
-        osc.connect(gainNode).connect(globalGain)
-        osc.start();
+        osc.connect(gainNode);
+        gainNode.connect(globalGain);
+        osc.start(now);
         
-        activeOscillators[key] = [osc,gainNode]
+        activeOscillators[key] = [osc, gainNode, false, peakGain, sustainGain];
+        
+        setTimeout(() => {
+            if (activeOscillators[key] && activeOscillators[key][0] === osc) {
+                activeOscillators[key][2] = true;
+            }
+        }, (attackTime + decayTime) * 1000);
     }
 });
